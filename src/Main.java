@@ -13,6 +13,8 @@ public class Main {
     private static Scanner scanner = new Scanner(System.in);
     private static RecordatorioDevolucion recordatorio;
 
+    private static Usuario usuarioActual = null;
+
     public static void main(String[] args) {
         // 1. Cargar datos iniciales
         cargarDatos();
@@ -24,7 +26,7 @@ public class Main {
         hiloRecordatorio.start();
 
         // 3. Loop de autenticación (Login)
-        Usuario usuarioActual = null;
+        
         while (usuarioActual == null) {
             System.out.println("\n=== Sistema de Biblioteca Digital - LOGIN ===");
             System.out.print("Ingrese su Email (o 'salir'): ");
@@ -101,10 +103,10 @@ public class Main {
     }
     
     // ... (ejecutarMenu, manejarMenuBibliotecario y manejarMenuLector permanecen iguales) ...
-    private static void ejecutarMenu(Usuario usuario) {
+    private static void ejecutarMenu(Usuario usuarioActual) {
         int opcion;
         do {
-            usuario.mostrarMenu(); // Polimorfismo: llama al menú específico
+            usuarioActual.mostrarMenu(); // Polimorfismo: llama al menú específico
             System.out.print("Seleccione una opción: ");
             
             try {
@@ -115,14 +117,26 @@ public class Main {
                 continue;
             }
 
-            if (usuario instanceof Bibliotecario) {
+            if (usuarioActual instanceof Bibliotecario) {
                 manejarMenuBibliotecario(opcion);
-            } else if (usuario instanceof Lector) {
+            } else if (usuarioActual instanceof Lector) {
                 manejarMenuLector(opcion);
             }
             
-        } while (opcion != 9 && !(usuario instanceof Lector && opcion == 6));
+        } while (opcion != 9 && !(usuarioActual instanceof Lector && opcion == 6));
     }
+    // NUEVO MÉTODO: Solo busca la existencia del usuario por email
+    private static Usuario buscarUsuarioPorEmail(String email) {
+    for (int i = 0; i < usuarios.totalElementos(); i++) {
+        Usuario user = usuarios.obtener(i);
+        if (user.getEmail().equalsIgnoreCase(email)) {
+            return user; // Retorna el usuario si el email coincide, ignorando la contraseña
+        }
+    }
+    return null; // No encontrado
+}
+
+    
     
     // --------------------------------------------------------------------------
     // Lógica de Menús
@@ -134,7 +148,7 @@ public class Main {
             case 2: agregarNuevoLibro(); break;
             case 3: eliminarLibro(); break;
             case 4: listarUsuarios(); break;
-            case 5: listarLibros(); break;
+            case 5: listarLibros(usuarioActual.getRol()); break;
             case 6: procesarPrestamo(); break;
             case 7: procesarDevolucion(); break;
             case 8: revertirListaLibros(); break;
@@ -145,12 +159,11 @@ public class Main {
     
     private static void manejarMenuLector(int opcion) {
         switch (opcion) {
-            case 1: listarLibros(); break;
+            case 1: listarLibros(usuarioActual.getRol()); break;
             case 2: buscarLibroPorTitulo(); break;
             case 3: procesarPrestamo(); break;   // <--- NUEVA FUNCIÓN
             case 4: procesarDevolucion(); break; // <--- NUEVA FUNCIÓN
-            case 5: 
-                System.out.println("Función de visualización de mis préstamos no implementada. Vuelve pronto!"); break; 
+            case 5: verMisPrestamos(); break; 
             case 6: System.out.println("Cerrando sesión de Lector..."); break;
             default: System.out.println("Opción inválida.");
         }
@@ -194,27 +207,51 @@ public class Main {
         System.out.println("✅ Libro '" + titulo + "' agregado al catálogo.");
     }
     
-    private static void listarLibros() {
+    private static void listarLibros(String rol) {
         System.out.println("\n==== CATÁLOGO DE LIBROS ====");
         if (libros.totalElementos() == 0) {
             System.out.println("(Catálogo vacío)");
             return;
         }
+        boolean esBibliotecario = rol.equalsIgnoreCase("Bibliotecario");
+
         for (int i = 0; i < libros.totalElementos(); i++) {
             Libro libro = libros.obtener(i);
             String info = String.format("%d. %s, por %s. [Estado: %s]", 
                                         i + 1, libro.getTitulo(), libro.getAutor(), libro.getEstado());
             if (libro.getEstado().equals("Prestado")) {
-                info += String.format(" (Vence: %s)", libro.getFechaDevolucion());
+                if (esBibliotecario){
+                info += String.format(" (Vence: %s, Prestatario: %s)", libro.getFechaDevolucion(),libro.getEmailPrestatario());
+            } else {
+                info += String.format(" (Vence: %s)", 
+                                          libro.getFechaDevolucion());
             }
+        }
             System.out.println(info);
         }
     }
     
     private static void procesarPrestamo() {
-        listarLibros();
+        listarLibros(usuarioActual.getRol());
         System.out.print("Título del libro a prestar: ");
         String tituloBuscado = scanner.nextLine();
+
+        String emailPrestatario;
+
+        if (usuarioActual instanceof Lector) {
+            // El Lector presta solo a sí mismo
+            emailPrestatario = usuarioActual.getEmail();
+            System.out.println("Préstamo registrado a su cuenta: " + emailPrestatario);
+        } else {
+            // El Bibliotecario debe indicar a quién se presta
+            System.out.print("Ingrese Email del Lector que tomará prestado el libro: ");
+            emailPrestatario = scanner.nextLine();
+            // Una verificación simple para evitar errores
+            if (buscarUsuarioPorEmail(emailPrestatario) == null) { 
+             System.out.println("❌ Error: El email del Lector no fue encontrado en el sistema.");
+             return;
+        }
+        }
         
         int indice = libros.buscar(tituloBuscado);
         if (indice != -1) {
@@ -225,14 +262,14 @@ public class Main {
                 try {
                     // Validar formato de fecha
                     LocalDate.parse(fechaStr); 
-                    libro.prestar(fechaStr);
+                    libro.prestar(fechaStr, emailPrestatario);
                     ManejadorArchivos.actualizarArchivo(libros, "Libros.txt");
-                    System.out.println("✅ Libro '" + libro.getTitulo() + "' prestado hasta " + fechaStr + ".");
+                    System.out.println("✅ Libro '" + libro.getTitulo() + "' prestado hasta " + fechaStr + " a " + emailPrestatario + ".");
                 } catch (DateTimeParseException e) {
-                    System.out.println("❌ ERROR: Formato de fecha incorrecto. Use YYYY-MM-DD.");
+                    System.out.println("❌ ERROR: Formato de fecha incorrecto, o la fecha ya paso. Use YYYY-MM-DD.");
                 }
             } else {
-                System.out.println("❌ El libro ya está prestado (Vence: " + libro.getFechaDevolucion() + ").");
+                System.out.println("❌ El libro ya está prestado (Prestatario: " + libro.getEmailPrestatario() + ", Vence: " + libro.getFechaDevolucion() + ").");
             }
         } else {
             System.out.println("❌ Libro no encontrado.");
@@ -246,6 +283,10 @@ public class Main {
         int indice = libros.buscar(tituloBuscado);
         if (indice != -1) {
             Libro libro = libros.obtener(indice);
+            if (usuarioActual instanceof Lector && !libro.getEmailPrestatario().equalsIgnoreCase(usuarioActual.getEmail())) {
+                 System.out.println("❌ Error: Solo puedes devolver libros prestados a tu cuenta.");
+                 return;
+            }
             if (libro.getEstado().equals("Prestado")) {
                 libro.devolver();
                 ManejadorArchivos.actualizarArchivo(libros, "Libros.txt");
@@ -295,7 +336,7 @@ public class Main {
         libros.revertir();
         ManejadorArchivos.actualizarArchivo(libros, "Libros.txt");
         System.out.println("✅ Lista de libros revertida y guardada.");
-        listarLibros();
+        listarLibros(usuarioActual.getRol());
     }
     
     private static void buscarLibroPorTitulo() {
@@ -309,6 +350,38 @@ public class Main {
                               libro.getTitulo(), libro.getAutor(), libro.getEstado());
         } else {
             System.out.println("❌ Libro no encontrado con ese título.");
+        }
+    }
+
+    private static void verMisPrestamos() {
+        System.out.println("\n==== MIS PRÉSTAMOS ACTUALES ====");
+        String emailLector = usuarioActual.getEmail();
+        int contador = 0;
+    
+        for (int i = 0; i < libros.totalElementos(); i++) {
+            Libro libro = libros.obtener(i);
+        
+            // PRIMERA CORRECCIÓN: Saltamos si el objeto Libro es nulo (por si hay un hueco en la lista)
+            if (libro == null) {
+              continue; 
+            }
+        
+            // El préstamo solo se verifica si el estado es "Prestado"
+            if (libro.getEstado().equals("Prestado")) { 
+                String prestatario = libro.getEmailPrestatario();
+                
+                // SEGUNDA CORRECCIÓN: Verificamos que el email del prestatario NO sea nulo
+                // antes de llamar a equalsIgnoreCase, lo que evita la NullPointerException.
+                if (prestatario != null && prestatario.equalsIgnoreCase(emailLector)) {
+                    System.out.printf("- '%s', por %s. (Devolución límite: %s)\n", 
+                                    libro.getTitulo(), libro.getAutor(), libro.getFechaDevolucion());
+                    contador++;
+                }
+            }
+        }
+    
+        if (contador == 0) {
+            System.out.println("No tienes libros prestados actualmente.");
         }
     }
 }

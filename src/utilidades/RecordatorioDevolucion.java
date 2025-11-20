@@ -30,7 +30,7 @@ public class RecordatorioDevolucion implements Runnable {
         while (ejecutar) { 
             try {
                 // Dormir el hilo 30 segundos (simula una revisión cada X tiempo)
-                TimeUnit.SECONDS.sleep(30); 
+                TimeUnit.SECONDS.sleep(60); 
                 
                 revisarVencimientos();
                 

@@ -78,14 +78,15 @@ public class ManejadorArchivos {
             while (sc.hasNextLine()) {
                 String linea = sc.nextLine();
                 String[] partes = linea.split(",");
-                if (partes.length == 5) {
+                if (partes.length == 6) {
                     String titulo = partes[0].trim();
                     String autor = partes[1].trim();
                     String genero = partes[2].trim();
                     String estado = partes[3].trim();
                     String fecha = partes[4].trim();
+                    String emailPrestatario = partes[5].trim();
                     
-                    lista.agregar(new Libro(titulo, autor, genero, estado, fecha));
+                    lista.agregar(new Libro(titulo, autor, genero, estado, fecha, emailPrestatario));
                 }
             }
         } catch (FileNotFoundException e) {
